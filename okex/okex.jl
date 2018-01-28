@@ -1,18 +1,31 @@
 using Requests
 using RedisAlchemy
 using JSON
+using MD5
+using OhMyJulia
 
-set_default_redis_connection(RedisConnectionPool())
+set_default_redis_connection(RedisConnectionPool(db=1))
+
+const apikey = RedisString("okex.apikey")[]
+const apisec = RedisString("okex.apisec")[]
 
 function okget(path)
-    req = Requests.get("https://www.okex.com/api/v1$path")
+    req = Requests.get("https://www.okex.com/api/v1$path", timeout=2)
     status = Requests.statuscode(req)
     status != 200 && throw("okex responses code $status")
     readstring(req) |> JSON.parse
 end
 
-function okpost()
-    
+function okpost(path; args...)
+    str = map(x->join(x, '='), args)
+    push!(str, "api_key=$apikey")
+    str = join(sort(str), '&')
+    sign = uppercase(bytes2hex(md5(str * "&secret_key=$apisec")))
+    data = str * "&sign=$sign"
+    req = Requests.post("https://www.okex.com/api/v1$path", data=data, headers=Dict("Content-Type"=>"application/x-www-form-urlencoded"), timeout=2)
+    status = Requests.statuscode(req)
+    status != 200 && throw("okex responses code $status")
+    readstring(req) |> JSON.parse
 end
 
 align_time(f, t=60, phrase=0; nretry=3) = while true
@@ -25,6 +38,7 @@ align_time(f, t=60, phrase=0; nretry=3) = while true
         try
             f()
         catch e
+            println(STDERR, e)
             if ntrail < nretry
                 ntrail += 1
                 sleep(0.1)
@@ -37,12 +51,23 @@ align_time(f, t=60, phrase=0; nretry=3) = while true
     end     
 end
 
-is_delivering() = let now = now()
-    Dates.dayofweek(now) == 5 && 10 <= Dates.hour(now) < 20
+is_delivering() = let now = Dates.unix2datetime(time())
+    Dates.dayofweek(now) == 5 && 2 <= Dates.hour(now) < 12
 end
 
-function in_same_week(a, b)
+function next_deliver_day(t=floor(Int, time() / 60))
+    tm = Dates.unix2datetime(60t)
+    dw = Dates.dayofweek(tm)
+    dd = if dw != 5
+        d = dw < 5 ? 5 - dw : 12 - dw
+        tm + Dates.Day(d)
+    elseif Dates.hour(tm) < 8
+        tm 
+    else
+        tm + Dates.Day(7)
+    end
     
+    Dates.format(dd, dateformat"yymmdd")
 end
 
 function deliver()
