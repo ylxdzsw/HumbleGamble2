@@ -83,14 +83,14 @@ function deliver()
 
     deliver_day = next_deliver_day(parse(Int, last[]))
     
-    dict = Dict(car(x) => x for x in kline[:])
-    for d in depth @when car(d) in keys(dict)
+    dict = Dict(car(x) => x for x in JSON.parse.(kline[:]))
+    for d in JSON.parse.(depth[:]) @when car(d) in keys(dict)
         push!(dict[car(d)], cdr(d)...)
     end
     
     fname = Dates.format(deliver_day, dateformat"yymmdd")
     open("/var/HumbleGamble2/okex_btc_$fname.json", "w") do f
-        foreach(x->prt(f, x...), sort(collect(values(dict))))
+        foreach(x->prt(f, x...), sort(collect(values(dict)), by=car))
     end
     
     exec(kline, "del")

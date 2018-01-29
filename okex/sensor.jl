@@ -1,7 +1,7 @@
 include("okex.jl")
 
 # heartbeat
-@shedule let
+@schedule let
     alive = RedisString("okex.alive")
     
     align_time(5) do
@@ -10,7 +10,7 @@ include("okex.jl")
 end
 
 # kline
-@shedule let
+@schedule let
     kline = RedisList{String}("okex.kline")
     last = RedisString("okex.last")
     tid = RedisString("okex.tid")
@@ -36,13 +36,13 @@ end
         buys  = filter(x->x["type"] == "buy", ts)
         sells = filter(x->x["type"] == "sell", ts)
         
-        buym  = mean(map(i"\"price\"", buys))
-        sellm = mean(map(i"\"price\"", sells))
+        buym  = isempty(buys)  ? res[2] : mean(map(i"\"price\"", buys))
+        sellm = isempty(sells) ? res[2] : mean(map(i"\"price\"", sells))
         
-        buyv  = sum(map(i"\"amount\"", buys))
-        sellv = sum(map(i"\"amount\"", sells))
+        buyv  = isempty(buys)  ? 0 : sum(map(i"\"amount\"", buys))
+        sellv = isempty(sells) ? 0 : sum(map(i"\"amount\"", sells))
         
-        [ts[1]["date"], low, res..., high, buym, sellm, buyv, sellv, length(ts)]
+        Any[ts[1]["date"], low, res..., high, buym, sellm, buyv, sellv, length(ts)]
     end
     
     align_time(60, 5) do
@@ -60,7 +60,7 @@ end
             k = length(trades) > 10 ? trades[end-10]["tid"] : parse(Int, tid[])
             data = okpost("/future_trades_history.do", symbol="btc_usd", date=deliverdate, since=k) # assume ordered
             
-            k = trades[end]["tid"]
+            k = isempty(trades) ? k : trades[end]["tid"]
             for line in data @when line["tid"] > k
                 line["date"] ÷= 60_000
                 line["price"] = parse(Float64, line["price"])
@@ -90,19 +90,20 @@ end
 end
 
 # depth
-@shedule let
+@schedule let
     depth = RedisList{String}("okex.depth")
     last = Ref(floor(Int, time() / 60))
-    acc = []
+    deps = []
     
     align_time(10, 1, nretry=0) do
         is_delivering() && return
         
         now = floor(Int, time() / 60)
         if last[] != now
-            if length(acc) >= 3
-                push!(depth, JSON.json([last[], map(mean, zip(acc...))...]))
-                last[], acc = now, []
+            if length(deps) >= 3
+                push!(depth, JSON.json(Any[last[], map(mean, zip(deps...))...]))
+                last[] = now
+                empty!(deps)
             end
         end
         
@@ -128,11 +129,9 @@ end
         askd = sum(cadr, asks)
         bidd = sum(cadr, bids)
         
-        push!(acc, (ask1, askd, bid1, bidd))
+        push!(deps, (ask1, askd, bid1, bidd))
     end
 end
 
-
-
-
+isinteractive() || wait()
 
