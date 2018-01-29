@@ -58,7 +58,8 @@ end
 function next_deliver_day(t=floor(Int, time() / 60))
     tm = Dates.unix2datetime(60t)
     dw = Dates.dayofweek(tm)
-    dd = if dw != 5
+    
+    if dw != 5
         d = dw < 5 ? 5 - dw : 12 - dw
         tm + Dates.Day(d)
     elseif Dates.hour(tm) < 8
@@ -66,10 +67,42 @@ function next_deliver_day(t=floor(Int, time() / 60))
     else
         tm + Dates.Day(7)
     end
-    
-    Dates.format(dd, dateformat"yymmdd")
+end
+
+function start_time(t=floor(Int, time() / 60))
+    tm = next_deliver_day(t) - Dates.Day(7)
+    tm += Dates.Hour(12 - Dates.hour(tm))
+    floor(Int, Dates.datetime2unix(tm) / 3600) * 60
 end
 
 function deliver()
+    kline = RedisList{String}("okex.kline")
+    depth = RedisList{String}("okex.depth")
+    last = RedisString("okex.last")
+    tid = RedisString("okex.tid")
 
+    deliver_day = next_deliver_day(parse(Int, last[]))
+    
+    dict = Dict(car(x) => x for x in kline[:])
+    for d in depth @when car(d) in keys(dict)
+        push!(dict[car(d)], cdr(d)...)
+    end
+    
+    fname = Dates.format(deliver_day, dateformat"yymmdd")
+    open("/var/HumbleGamble2/okex_btc_$fname.json", "w") do f
+        foreach(x->prt(f, x...), sort(collect(values(dict))))
+    end
+    
+    exec(kline, "del")
+    exec(depth, "del")
+    last[], tid[] = start_time(), 0
 end
+
+
+
+
+
+
+
+
+
