@@ -43,8 +43,6 @@ align_time(f, t=60, phrase=0; nretry=3) = while true
                 ntrail += 1
                 sleep(0.1)
                 continue
-            else
-                rethrow(e)
             end
         end
         break

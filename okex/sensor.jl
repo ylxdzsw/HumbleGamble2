@@ -28,7 +28,7 @@ end
         for t in sort(ts, by=i"\"price\"") @when i <= 3
             acc += t["amount"]
             if acc >= mp[i]
-                res[i] = t["price"]
+                res[i:end] = t["price"]
                 i += 1
             end    
         end
@@ -95,7 +95,7 @@ end
     last = Ref(floor(Int, time() / 60))
     deps = []
     
-    align_time(10, 1, nretry=0) do
+    align_time(10, 1) do
         is_delivering() && return
         
         now = floor(Int, time() / 60)
