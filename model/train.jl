@@ -31,7 +31,7 @@ function complete_data(ds)
             comp[i][8:10] = 0
         end
         
-        index[t] = d
+        comp[t] = d
         lastt = t
     end
     
@@ -39,12 +39,13 @@ function complete_data(ds)
 end
 
 function cherry_pick(ds)
-    cheeries = []
+    cherries = []
     for i in 132:length(ds)-1 @when all(length(ds[j]) > 10 && ds[j][10] > 5 for j in i:i-4)
         kline, depth = scale_and_format(ds[i-131:i])
         sellp, buyp  = ds[i+1][[2, 4]]
         push!(cherries, (kline, depth, buyp, sellp))
     end
+    cherries
 end
 
 function scale_and_format(data)
